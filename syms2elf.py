@@ -576,6 +576,7 @@ def log(msg=''):
 def log_r2(msg=''):
     print("%s" % msg)
 
+
 def write_symbols(input_file, output_file, symbols):
     try:        
         with open(input_file, 'rb') as f:
@@ -596,7 +597,7 @@ def write_symbols(input_file, output_file, symbols):
             "type"      : SHTypes.SHT_SYMTAB,
             "flags"     : 0,
             "addr"      : 0,
-            "offset"    : len(bin.binary) + (bin.sizeof_sh() * 2),
+            "offset"    : len(bin.binary) + (bin.sizeof_sh() * (bin.ElfHeader.e_shnum + 2)),
             "size"      : (len(symbols) + 1) * bin.sizeof_sym(),
             "link"      : bin.ElfHeader.e_shnum + 1, # index of SHT_STRTAB
             "info"      : 1,
@@ -604,7 +605,7 @@ def write_symbols(input_file, output_file, symbols):
             "entsize"   : bin.sizeof_sym()
         }
 
-        off_strtab = (len(bin.binary) + (bin.sizeof_sh() * 2) + (bin.sizeof_sym() * (len(symbols) + 1)))
+        off_strtab = (len(bin.binary) + (bin.sizeof_sh() * (bin.ElfHeader.e_shnum + 2)) + (bin.sizeof_sym() * (len(symbols) + 1)))
 
         strtab = {
             "name"      : SHN_UNDEF,
@@ -619,8 +620,24 @@ def write_symbols(input_file, output_file, symbols):
             "entsize"   : 0
         }
 
+        shdrs = bin.binary[bin.ElfHeader.e_shoff:bin.ElfHeader.e_shoff + (bin.sizeof_sh() * bin.ElfHeader.e_shnum)]
         bin.ElfHeader.e_shnum += 2
+        bin.ElfHeader.e_shoff = len(bin.binary)
         bin.write(0, bin.ElfHeader)
+        bin.binary.extend(shdrs)
+
+        base = bin.binary[bin.ElfHeader.e_shoff:]
+        _off = bin.ElfHeader.e_shoff
+        for i in range(bin.ElfHeader.e_shnum - 2):
+            if bin.getArchMode() == 32:
+                if   bin.ei_data == ELFFlags.ELFDATA2LSB: shdr = Elf32_Shdr_LSB.from_buffer_copy(base)
+                elif bin.ei_data == ELFFlags.ELFDATA2MSB: shdr = Elf32_Shdr_MSB.from_buffer_copy(base)
+            elif bin.getArchMode() == 64:
+                if   bin.ei_data == ELFFlags.ELFDATA2LSB: shdr = Elf64_Shdr_LSB.from_buffer_copy(base)
+                elif bin.ei_data == ELFFlags.ELFDATA2MSB: shdr = Elf64_Shdr_MSB.from_buffer_copy(base)
+            base = base[bin.ElfHeader.e_shentsize:]
+            bin.write(_off, shdr)
+            _off += bin.sizeof_sh()
         bin.append_section_header(symtab)
         bin.append_section_header(strtab)
 
@@ -652,7 +669,7 @@ def write_symbols(input_file, output_file, symbols):
                 "shndx" : sh_idx
             }
 
-            log("0x%08x - %s" % (s.value, s.name))
+            #log("0x%08x - 0x%08x - %s - %d/%d - %d" % (s.value, s.size, s.name, strtab_raw.index(s.name), len(strtab_raw), s.info))
             bin.append_symbol(sym)
 
         # add symbol strings
@@ -702,6 +719,8 @@ def get_r2_symbols():
 
         if fnc_name.startswith(("sym","fcn")):
             fnc_name = fnc_name[4:]
+            if fnc_name.startswith("go."):
+                fnc_name = fnc_name[3:]
 
         symbols.append(Symbol(fnc_name, STB_GLOBAL_FUNC, 
             fnc['offset'], int(fnc['size']), sh_name))
