@@ -310,8 +310,8 @@ class ELF:
         self.shdr_l    = []
         self.phdr_l    = []
         self.syms_l    = []
-        self.e_ident   = str(self.binary[:15]) 
-        self.ei_data   = unpack("<B", self.e_ident[ELFFlags.EI_DATA])[0] # LSB/MSB
+        self.e_ident   = self.binary[:15]
+        self.ei_data   = unpack("<B", self.e_ident[ELFFlags.EI_DATA:ELFFlags.EI_DATA+1])[0] # LSB/MSB
         
         self.__setHeaderElf()
         self.__setShdr()
@@ -364,7 +364,7 @@ class ELF:
     def get_symtab(self):
         shstrtab = bytes(self.get_shstrtab_data())
         for sh in self.shdr_l:
-            sh_name = shstrtab[sh.sh_name:].split("\0")[0]
+            sh_name = shstrtab[sh.sh_name:].split(b"\0")[0]
             if  sh.sh_type == SHTypes.SHT_SYMTAB and \
                 (sh.sh_name == SHN_UNDEF or sh_name == ".symtab"):
                 return sh
@@ -373,7 +373,7 @@ class ELF:
     def get_strtab(self):
         shstrtab = bytes(self.get_shstrtab_data())
         for sh in self.shdr_l:
-            sh_name = shstrtab[sh.sh_name:].split("\0")[0]
+            sh_name = shstrtab[sh.sh_name:].split(b"\0")[0]
             if  sh.sh_type == SHTypes.SHT_STRTAB and \
                 (sh.sh_name == SHN_UNDEF or sh_name == ".strtab"):
                 return sh
@@ -390,10 +390,10 @@ class ELF:
 
     """ Parse ELF header """
     def __setHeaderElf(self):
-        e_ident = str(self.binary[:15])
+        e_ident = self.binary[:15]
 
-        ei_class = unpack("<B", e_ident[ELFFlags.EI_CLASS])[0]
-        ei_data  = unpack("<B", e_ident[ELFFlags.EI_DATA])[0]
+        ei_class = unpack("<B", e_ident[ELFFlags.EI_CLASS:ELFFlags.EI_CLASS+1])[0]
+        ei_data  = unpack("<B", e_ident[ELFFlags.EI_DATA:ELFFlags.EI_DATA+1])[0]
 
         if ei_class != ELFFlags.ELFCLASS32 and ei_class != ELFFlags.ELFCLASS64:
             log("[Error] ELF.__setHeaderElf() - Bad Arch size")
@@ -423,8 +423,8 @@ class ELF:
         base = self.binary[self.ElfHeader.e_shoff:]
         shdr_l = []
 
-        e_ident = str(self.binary[:15])
-        ei_data = unpack("<B", e_ident[ELFFlags.EI_DATA])[0]
+        e_ident = self.binary[:15]
+        ei_data = unpack("<B", e_ident[ELFFlags.EI_DATA:ELFFlags.EI_DATA+1])[0]
 
         for i in range(shdr_num):
             if self.getArchMode() == 32:
@@ -437,9 +437,9 @@ class ELF:
             self.shdr_l.append(shdr)
             base = base[self.ElfHeader.e_shentsize:]
 
-        string_table = str(self.binary[(self.shdr_l[self.ElfHeader.e_shstrndx].sh_offset):])
+        string_table = self.binary[(self.shdr_l[self.ElfHeader.e_shstrndx].sh_offset):]
         for i in range(shdr_num):
-            self.shdr_l[i].str_name = string_table[self.shdr_l[i].sh_name:].split('\0')[0]
+            self.shdr_l[i].str_name = string_table[self.shdr_l[i].sh_name:].split(b'\0')[0]
 
     """ Parse Program header """
     def __setPhdr(self):
@@ -447,8 +447,8 @@ class ELF:
         base = self.binary[self.ElfHeader.e_phoff:]
         phdr_l = []
 
-        e_ident = str(self.binary[:15])
-        ei_data = unpack("<B", e_ident[ELFFlags.EI_DATA])[0]
+        e_ident = self.binary[:15]
+        ei_data = unpack("<B", e_ident[ELFFlags.EI_DATA:ELFFlags.EI_DATA+1])[0]
 
         for i in range(pdhr_num):
             if self.getArchMode() == 32:
@@ -463,7 +463,7 @@ class ELF:
 
     def get_section_id(self, sh_name):
         for idx, sh in enumerate(self.shdr_l):
-            if sh.str_name == sh_name:
+            if sh.str_name == sh_name.encode('ascii'):
                 return idx
         return None
 
@@ -590,7 +590,7 @@ def write_symbols(input_file, output_file, symbols):
         bin.strip_symbols()
 
         # raw strtab
-        strtab_raw = "\x00" + "\x00".join([sym.name for sym in symbols]) + "\x00"
+        strtab_raw = b"\x00" + b"\x00".join([sym.name.encode('ascii') for sym in symbols]) + b"\x00"
 
         symtab = {
             "name"      : SHN_UNDEF,
@@ -661,7 +661,7 @@ def write_symbols(input_file, output_file, symbols):
                 continue
 
             sym = {
-                "name"  : strtab_raw.index(s.name),
+                "name"  : strtab_raw.index(s.name.encode('ascii')),
                 "value" : s.value,
                 "size"  : s.size,
                 "info"  : s.info,
@@ -673,7 +673,7 @@ def write_symbols(input_file, output_file, symbols):
             bin.append_symbol(sym)
 
         # add symbol strings
-        bin.binary.extend(str(strtab_raw))
+        bin.binary.extend(strtab_raw)
 
         log("ELF saved to: %s" % output_file)
         bin.save(output_file)
