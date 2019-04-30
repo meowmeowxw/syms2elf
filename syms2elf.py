@@ -17,24 +17,25 @@
 #
 
 PLUG_NAME    = "syms2elf"
-VERSION      = "v0.2"
 
 import os
 import sys
 
-from ctypes    import *
-from struct    import unpack
+from ctypes import *
+from struct import unpack
 
 USE_R2  = False
 USE_IDA = False
 
-if "IDA_SDK_VERSION" in globals():
+try:
+    import idaapi
     USE_IDA = True
-elif "radare2" in os.environ.get('PATH',''):
-    USE_R2  = True
-else:
-    print("ERROR: The plugin must be run in IDA or radare2")
-    sys.exit(0)
+except:
+    if "radare2" in os.environ.get('PATH',''):
+        USE_R2  = True
+    else:
+        print("ERROR: The plugin must be run in IDA or radare2")
+        sys.exit(0)
 
 SHN_UNDEF = 0
 STB_GLOBAL_FUNC = 0x12
@@ -803,7 +804,6 @@ elif USE_R2:
     log = log_r2
 
     if len(sys.argv) < 2:
-        log("%s - %s" % (PLUG_NAME, VERSION))
         log("Usage: $syms2elf <output file>")
         sys.exit(0)
 
